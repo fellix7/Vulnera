@@ -56,4 +56,18 @@ export interface ScanResult {
   packageCount: number;
   findings: Finding[];
   plans: UpgradePlan[];
+  aiStatus: 'ok' | 'disabled' | 'error'; // disabled = no GEMINI_API_KEY or no source provided
+  notes: string[]; // non-fatal warnings shown in the UI (e.g. offline cache misses)
+}
+
+export interface SourceFile {
+  path: string; // relative, e.g. "src/routes/notes.js"
+  content: string;
+}
+
+// POST /api/scan body. Either a lockfile or sample: true (server loads samples/demo-app).
+export interface ScanRequest {
+  lockfile?: unknown;
+  sources?: SourceFile[];
+  sample?: boolean;
 }

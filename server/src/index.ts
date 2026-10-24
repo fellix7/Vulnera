@@ -28,6 +28,8 @@ app.post('/api/scan', (req, res) => {
     packageCount: 0,
     findings: [],
     plans: [],
+    aiStatus: 'disabled',
+    notes: [],
   };
   res.json(result);
 });
