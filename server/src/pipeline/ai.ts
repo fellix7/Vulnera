@@ -538,39 +538,46 @@ interface Prepared {
 function packageCode(pkgName: string, importingFiles: string[], sources: SourceFile[], advisoryText: string): PackageCode {
   const keywords = advisoryKeywords(advisoryText, pkgName);
   const byPath = new Map(sources.map((s) => [s.path, s]));
-  const prepared: Prepared[] = [];
+  const prepareAll = (windowed: boolean): Prepared[] => {
+    const out: Prepared[] = [];
+    for (const path of [...importingFiles].sort()) {
+      const src = byPath.get(path);
+      if (!src) continue;
+      const lines = splitLines(src.content);
+      const rowOf = (i: number) => {
+        const l = lines[i].length > MAX_LINE_CHARS ? `${lines[i].slice(0, MAX_LINE_CHARS)}...` : lines[i];
+        return `${i + 1}: ${l}`;
+      };
+      // Whole file when it fits. Otherwise only the code around the import and every use of what it imported.
+      const wholeSize = lines.reduce((n, _l, i) => n + rowOf(i).length + 1, 0);
+      const keep = windowed || wholeSize > MAX_FILE_CHARS ? relevantLines(lines, pkgName) : null;
 
-  for (const path of [...importingFiles].sort()) {
-    const src = byPath.get(path);
-    if (!src) continue;
-    const lines = splitLines(src.content);
-    const rowOf = (i: number) => {
-      const l = lines[i].length > MAX_LINE_CHARS ? `${lines[i].slice(0, MAX_LINE_CHARS)}...` : lines[i];
-      return `${i + 1}: ${l}`;
-    };
-    // Small files go in whole. Oversized files keep only the code around the import and its uses.
-    const wholeSize = lines.reduce((n, _l, i) => n + rowOf(i).length + 1, 0);
-    const keep = wholeSize > MAX_FILE_CHARS ? relevantLines(lines, pkgName) : null;
-
-    const rows: string[] = [];
-    let size = 0;
-    let cutInFile = false;
-    let prev = -2;
-    for (let i = 0; i < lines.length; i++) {
-      if (keep && !keep.has(i)) continue;
-      const row = rowOf(i);
-      if (size + row.length > MAX_FILE_CHARS) {
-        cutInFile = true;
-        break;
+      const rows: string[] = [];
+      let size = 0;
+      let cutInFile = false;
+      let prev = -2;
+      for (let i = 0; i < lines.length; i++) {
+        if (keep && !keep.has(i)) continue;
+        const row = rowOf(i);
+        if (size + row.length > MAX_FILE_CHARS) {
+          cutInFile = true;
+          break;
+        }
+        if (keep && i !== prev + 1 && rows.length > 0) rows.push('...');
+        rows.push(row);
+        size += row.length + 1;
+        prev = i;
       }
-      if (keep && i !== prev + 1 && rows.length > 0) rows.push('...');
-      rows.push(row);
-      size += row.length + 1;
-      prev = i;
+      const haystack = `${path}\n${src.content}`.toLowerCase();
+      out.push({ path, rows, size, cutInFile, score: keywords.filter((k) => haystack.includes(k)).length });
     }
-    const haystack = `${path}\n${src.content}`.toLowerCase();
-    prepared.push({ path, rows, size, cutInFile, score: keywords.filter((k) => haystack.includes(k)).length });
-  }
+    return out;
+  };
+
+  // Whole files while they fit. A package used all over the project (a framework) gets only
+  // the lines around its imports and uses, for every file, instead of dropping files.
+  let prepared = prepareAll(false);
+  if (prepared.reduce((n, f) => n + f.size, 0) > MAX_TOTAL_CODE_CHARS) prepared = prepareAll(true);
 
   // Everything fits: send it all. Otherwise the files that mention the advisories' terms go first.
   const totalSize = prepared.reduce((n, f) => n + f.size, 0);
