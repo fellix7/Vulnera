@@ -28,6 +28,9 @@ function App() {
     setLoading(true)
     setError(null)
     setSelectedKey(null)
+    // Drop the previous scan so a failure never shows old results next to the new error.
+    setResult(null)
+    setReview({})
     try {
       const r = await postScan(req)
       setResult(r)
