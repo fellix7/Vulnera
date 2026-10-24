@@ -11,10 +11,14 @@ import type { AiVerdict, Finding, SourceFile } from '../types.js';
 export const DEFAULT_MODEL = 'gemini-2.5-flash-lite'; // override with GEMINI_MODEL
 const DEFAULT_LIMIT = 30;
 const CONCURRENCY = 4;
-const CALL_TIMEOUT_MS = 60_000; // one call now covers a whole package
+const CALL_TIMEOUT_MS = 90_000; // one call now covers a whole package
 const BATCH_SIZE = 12; // advisories per call
-const MAX_FILE_CHARS = 8000;
-const MAX_TOTAL_CODE_CHARS = 20_000;
+// When every answer is replayed from a saved analysis there is no network wait; keep the loading state
+// visible for a realistic time instead of flashing results instantly.
+const REPLAY_DELAY_PER_CALL_MS = 2000;
+const REPLAY_DELAY_MAX_MS = 15_000;
+const MAX_FILE_CHARS = 40_000; // per file; real projects have large files
+const MAX_TOTAL_CODE_CHARS = 120_000; // ~30k tokens per call, within free-tier token limits
 const MAX_SNIPPETS = 8;
 const CONTEXT_LINES = 3;
 const MAX_LINE_CHARS = 300; // long (minified) lines are truncated before being sent
@@ -285,7 +289,12 @@ const BATCH_SCHEMA = {
   required: ['results'],
 };
 
+// If the primary model is out of quota for the day or overloaded, the next one is tried.
+const FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
+// Saved analyses are replayed whichever model is live; the tag is the model they were recorded with.
+const SNAPSHOT_KEY_TAG = 'gemini-2.5-flash-lite';
 const getModel = () => process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+const modelList = () => [...new Set([getModel(), ...FALLBACK_MODELS])];
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
@@ -348,14 +357,16 @@ async function waitForSlot() {
 function rateLimitDelayMs(e: unknown): number | null {
   const msg = errMsg(e);
   if (!/\b429\b|RESOURCE_EXHAUSTED/.test(msg)) return null;
+  if (/PerDay/i.test(msg)) return null; // daily quota: waiting will not help, switch model instead
   const m = /retry in ([\d.]+)s/i.exec(msg) ?? /"retryDelay":"([\d.]+)s"/.exec(msg);
   const seconds = m ? Number(m[1]) : 30;
   return Math.min(MAX_RATE_LIMIT_WAIT_MS, Math.ceil(seconds * 1000) + 1000);
 }
 
 /** One structured Gemini call. Paced to the rate limit; waits and retries on 429; retried once on other failures or bad JSON. */
-async function callGemini<T>(
+async function callModel<T>(
   client: GoogleGenAI,
+  model: string,
   args: { system: string; prompt: string; schema: object; parse: (raw: unknown) => T },
 ): Promise<T> {
   let lastErr: unknown;
@@ -366,7 +377,7 @@ async function callGemini<T>(
       const res = await withTimeout(
         (signal) =>
           client.models.generateContent({
-            model: getModel(),
+            model,
             contents: args.prompt,
             config: {
               systemInstruction: args.system,
@@ -388,6 +399,26 @@ async function callGemini<T>(
         nextCallAt = Math.max(nextCallAt, Date.now() + delay);
         attempt--;
       }
+    }
+  }
+  throw lastErr;
+}
+
+/** True when trying a different model could help: daily quota used up, model overloaded, or model unknown. */
+const modelUnavailable = (e: unknown) => /PerDay|\b503\b|UNAVAILABLE|\b404\b|NOT_FOUND|timed out/i.test(errMsg(e));
+
+/** One structured Gemini call, falling back through other models when one is unavailable. */
+async function callGemini<T>(
+  client: GoogleGenAI,
+  args: { system: string; prompt: string; schema: object; parse: (raw: unknown) => T },
+): Promise<T> {
+  let lastErr: unknown;
+  for (const model of modelList()) {
+    try {
+      return await callModel(client, model, args);
+    } catch (e) {
+      lastErr = e;
+      if (!modelUnavailable(e)) throw e;
     }
   }
   throw lastErr;
@@ -420,40 +451,80 @@ const uncertain = (reasoning: string): AiVerdict => ({ verdict: 'UNCERTAIN', rea
 interface PackageCode {
   text: string;
   truncated: boolean; // some importing code was left out
+  cutFiles: number; // files only partly (or not at all) included
+  totalFiles: number;
 }
 
 /** Line-numbered contents of the files that import the package, within a size budget. Secrets masked. */
-function packageCode(importingFiles: string[], sources: SourceFile[]): PackageCode {
+const IMPORT_KEYWORDS = new Set(['const', 'let', 'var', 'import', 'from', 'require', 'as', 'default', 'type', 'await', 'export']);
+const NEAR_USE_LINES = 4; // context kept around each use in oversized files
+
+/** Identifiers an import line binds, e.g. `const _ = require('lodash')` -> ["_"]. */
+function importBindings(importLines: string[]): string[] {
+  const ids = new Set<string>();
+  for (const line of importLines) {
+    const head = line.split(/['"`]/)[0] ?? '';
+    for (const id of head.match(/[A-Za-z_$][\w$]*/g) ?? []) if (!IMPORT_KEYWORDS.has(id)) ids.add(id);
+  }
+  return [...ids];
+}
+
+/** For a file over budget: line indexes (0-based) near the import and near every use of what it imported. */
+function relevantLines(lines: string[], pkgName: string): Set<number> {
+  const importRe = importRegex(pkgName);
+  const importLines = lines.filter((l) => importRe.test(l));
+  const bindings = importBindings(importLines);
+  const useRe = bindings.length ? new RegExp(`(?<![\\w$.])(?:${bindings.map(escapeRe).join('|')})(?![\\w$])`) : null;
+  const keep = new Set<number>();
+  lines.forEach((l, i) => {
+    if (importRe.test(l) || (useRe && useRe.test(l))) {
+      for (let k = Math.max(0, i - NEAR_USE_LINES); k <= Math.min(lines.length - 1, i + NEAR_USE_LINES); k++) keep.add(k);
+    }
+  });
+  return keep;
+}
+
+function packageCode(pkgName: string, importingFiles: string[], sources: SourceFile[]): PackageCode {
   // Sorted so the same project gives the same prompt (and cache key) however its files were listed or uploaded.
-  importingFiles = [...importingFiles].sort();
+  const files = [...importingFiles].sort();
   const byPath = new Map(sources.map((s) => [s.path, s]));
   const parts: string[] = [];
   let total = 0;
-  let truncated = false;
-  for (const path of importingFiles) {
+  let cutFiles = 0;
+  for (const path of files) {
     const src = byPath.get(path);
     if (!src) continue;
+    const lines = splitLines(src.content);
+    const rowOf = (i: number) => {
+      const l = lines[i].length > MAX_LINE_CHARS ? `${lines[i].slice(0, MAX_LINE_CHARS)}...` : lines[i];
+      return `${i + 1}: ${l}`;
+    };
+    // Small files go in whole. Oversized files keep only the code around the import and its uses.
+    const wholeSize = lines.reduce((n, _l, i) => n + rowOf(i).length + 1, 0);
+    const oversized = wholeSize > MAX_FILE_CHARS;
+    const keep = oversized ? relevantLines(lines, pkgName) : null;
+
     const rows: string[] = [];
     let used = 0;
-    const lines = splitLines(src.content);
+    let cut = false;
+    let prev = -2;
     for (let i = 0; i < lines.length; i++) {
-      const l = lines[i].length > MAX_LINE_CHARS ? `${lines[i].slice(0, MAX_LINE_CHARS)}...` : lines[i];
-      const row = `${i + 1}: ${l}`;
+      if (keep && !keep.has(i)) continue;
+      const row = rowOf(i);
       if (used + row.length > MAX_FILE_CHARS || total + used + row.length > MAX_TOTAL_CODE_CHARS) {
-        truncated = true;
+        cut = true;
         break;
       }
+      if (keep && i !== prev + 1 && rows.length > 0) rows.push('...');
       rows.push(row);
       used += row.length + 1;
+      prev = i;
     }
+    if (cut) cutFiles++;
     total += used;
-    parts.push(`<file path="${path}">\n${rows.join('\n')}\n</file>`);
-    if (total >= MAX_TOTAL_CODE_CHARS) {
-      truncated = truncated || path !== importingFiles[importingFiles.length - 1];
-      break;
-    }
+    if (rows.length > 0) parts.push(`<file path="${path}">\n${rows.join('\n')}\n</file>`);
   }
-  return { text: redact(parts.join('\n')), truncated };
+  return { text: redact(parts.join('\n')), truncated: cutFiles > 0, cutFiles, totalFiles: files.length };
 }
 
 type Item = { key: string; finding: Finding };
@@ -465,7 +536,8 @@ async function analyzeChunk(
   code: PackageCode,
   sources: SourceFile[],
   verdicts: Map<string, AiVerdict>,
-): Promise<void> {
+): Promise<boolean> {
+  let live = false;
   const advisories = chunk
     .map(({ finding: { advisory } }) =>
       [
@@ -477,17 +549,18 @@ async function analyzeChunk(
     )
     .join('\n');
   const cacheKey = createHash('sha256')
-    .update(JSON.stringify([PROMPT_VERSION, getModel(), pkgName, chunk.map((c) => c.finding.advisory.id), code.text]))
+    .update(JSON.stringify([PROMPT_VERSION, SNAPSHOT_KEY_TAG, pkgName, chunk.map((c) => c.finding.advisory.id), code.text]))
     .digest('hex');
 
-  const items = await cached('gemini-package', cacheKey, () =>
-    callGemini(client, {
+  const items = await cached('gemini-package', cacheKey, () => {
+    live = true;
+    return callGemini(client, {
       system: BATCH_SYSTEM_PROMPT,
       prompt: BATCH_USER_PROMPT({ pkg: pkgName, advisories, code: code.text }),
       schema: BATCH_SCHEMA,
       parse: toBatch,
-    }),
-  );
+    });
+  });
   const byId = new Map(items.map((i) => [i.advisoryId, i]));
 
   for (const { key, finding } of chunk) {
@@ -500,7 +573,7 @@ async function analyzeChunk(
     // "Not used" is only trustworthy if the model saw all importing code and knew what to look for.
     if (verdict.verdict === 'NO_VULNERABLE_USAGE_FOUND' && (code.truncated || item.vulnerableApis.length === 0)) {
       const why = code.truncated
-        ? 'some code importing the package was too large to review'
+        ? `${code.cutFiles} of ${code.totalFiles} files importing the package were too large to review in full`
         : 'the advisory names no specific vulnerable function to look for';
       verdict = {
         verdict: 'UNCERTAIN',
@@ -510,6 +583,7 @@ async function analyzeChunk(
     }
     verdicts.set(key, verdict);
   }
+  return live;
 }
 
 export async function analyzeFindings(
@@ -544,8 +618,10 @@ export async function analyzeFindings(
       byPackage.set(group, [...(byPackage.get(group) ?? []), { key, finding: f }]);
     }
 
+    const startedAt = Date.now();
     let geminiOk = 0;
     let geminiFailed = 0;
+    let liveCalls = 0;
     const groups = [...byPackage.entries()];
     let next = 0;
     const worker = async () => {
@@ -563,11 +639,11 @@ export async function analyzeFindings(
           }
           continue;
         }
-        const code = packageCode(usage.importingFiles, sources);
+        const code = packageCode(pkgName, usage.importingFiles, sources);
         for (let i = 0; i < items.length; i += BATCH_SIZE) {
           const chunk = items.slice(i, i + BATCH_SIZE);
           try {
-            await analyzeChunk(client, pkgName, chunk, code, sources, verdicts);
+            if (await analyzeChunk(client, pkgName, chunk, code, sources, verdicts)) liveCalls++;
             geminiOk++;
           } catch (e) {
             geminiFailed++;
@@ -580,6 +656,12 @@ export async function analyzeFindings(
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, groups.length) }, worker));
+
+    if (geminiOk > 0 && liveCalls === 0) {
+      const target = Math.min(REPLAY_DELAY_MAX_MS, REPLAY_DELAY_PER_CALL_MS * geminiOk);
+      await sleep(Math.max(0, target - (Date.now() - startedAt)));
+      warnings.push('AI verdicts were replayed from a saved analysis of this exact project (no live Gemini call).');
+    }
 
     return { verdicts, status: geminiFailed > 0 && geminiOk === 0 ? 'error' : 'ok', warnings };
   } catch (e) {
