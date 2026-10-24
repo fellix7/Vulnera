@@ -21,7 +21,7 @@ AI never decides whether a package is vulnerable; that is an exact lookup. AI on
 
 ```
 server/   Express + TypeScript API (scan pipeline)
-client/   React + Vite dashboard
+client/   React + Vite app (landing page, overview, findings, code evidence, remediation, reports)
 samples/  Deliberately outdated demo project
 data/     KEV list and offline API snapshots for the demo
 docs/     Plan and design notes
@@ -34,6 +34,25 @@ npm install
 cp .env.example .env   # add your GEMINI_API_KEY
 npm run dev            # server on :8787, client on :5173
 ```
+
+Open http://localhost:5173. Without a lockfile handy, use **Scan the bundled sample project** (a real pipeline run on `samples/demo-app`) or **Explore demo data** (illustrative, labelled, instant). `?mock=1` still opens the demo data.
+
+To point the client at an API on another port: `VITE_API_TARGET=http://localhost:8788 npm run dev -w client`.
+
+## App pages
+
+| Path | What it answers |
+|---|---|
+| `/` | What Vulnera is and why it differs from a scanner |
+| `/scan` | Upload `package-lock.json` (+ optional source folder for the AI code check) |
+| `/overview` | Current risk posture and the funnel: all → production → used by your code → fix now |
+| `/findings` | Every finding, filterable and sortable; nothing is hidden |
+| `/finding?key=…` | Why it was ranked, advisory, dependency chain, code evidence, review, fix |
+| `/evidence` | Where your code reaches a vulnerable function, with verified citations |
+| `/remediation` | Minimum safe versions and the exact commands, verified vs suggested |
+| `/reports` | Markdown/JSON export, scan history (this browser only), before/after compare |
+
+Design tokens and the page contract are in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Security notes
 

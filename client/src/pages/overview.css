@@ -1,0 +1,524 @@
+/* /overview: risk posture. Hairline sections; a single bordered grid for the funnel. */
+
+.ov-page {
+  container-type: inline-size;
+  container-name: ov;
+  min-width: 0;
+}
+
+.ov-page .page-head h1 {
+  overflow-wrap: anywhere;
+}
+.ov-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  font-size: var(--fs-sm);
+}
+
+.ov-demo {
+  margin: calc(var(--s-3) * -1) 0 var(--s-6);
+}
+
+/* Section headings shared across the page */
+.ov-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-6);
+  margin-bottom: var(--s-4);
+}
+.ov-section-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+.ov-section-head h2 {
+  font-size: var(--fs-xl);
+  letter-spacing: -0.02em;
+}
+.ov-section-head__aside {
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+.ov-section-head--tight {
+  align-items: center;
+}
+.ov-section-head--tight h2 {
+  font-size: var(--fs-lg);
+  letter-spacing: -0.01em;
+}
+.ov-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ov-more:hover {
+  color: var(--text);
+}
+.ov-empty {
+  padding: var(--s-6) 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+/* Posture headline */
+.ov-posture {
+  --p: var(--ok);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+  padding: var(--s-1) 0 var(--s-1) var(--s-5);
+  border-left: 2px solid var(--p);
+}
+.ov-posture--critical {
+  --p: var(--critical);
+}
+.ov-posture--high {
+  --p: var(--high);
+}
+.ov-posture__icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--p);
+}
+.ov-posture > div {
+  min-width: 0;
+}
+.ov-posture h2 {
+  max-width: 62ch;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+.ov-posture p {
+  max-width: 76ch;
+  margin-top: var(--s-2);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+/* Funnel */
+.ov-funnel {
+  container-type: inline-size;
+  container-name: ovf;
+  margin-top: var(--s-12);
+}
+.ov-funnel__list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.ov-funnel__list > li {
+  display: flex;
+  min-width: 0;
+}
+.ov-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-5);
+  background: var(--surface-1);
+  text-decoration: none;
+  transition: background var(--t-fast) var(--ease);
+}
+.ov-stage:hover {
+  background: var(--surface-2);
+}
+.ov-stage:focus-visible {
+  outline-offset: -3px;
+}
+.ov-stage__step {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 22px;
+}
+.ov-stage__num {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xl);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.ov-stage__num.is-hot {
+  color: var(--critical);
+}
+.ov-stage__title {
+  margin-top: var(--s-1);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+.ov-stage__caption {
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.ov-stage__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: var(--s-4);
+}
+.ov-stage__bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.ov-stage__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--stage);
+  transition: width var(--t-med) var(--ease);
+}
+.ov-stage__bar.is-ai {
+  height: 8px;
+  background: transparent;
+  border: 1px dashed var(--ai-line);
+}
+.ov-stage__pct {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+.ov-stage__detail {
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+  min-height: 4.2em;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.ov-stage__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--s-1);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  transition: color var(--t-fast);
+}
+.ov-stage:hover .ov-stage__go {
+  color: var(--text);
+}
+.ov-funnel__note {
+  margin-top: var(--s-3);
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+@container ovf (max-width: 900px) {
+  .ov-funnel__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container ovf (max-width: 460px) {
+  .ov-funnel__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ov-stage__detail {
+    min-height: 0;
+  }
+}
+
+/* Two columns: most urgent | by action + breakdowns */
+.ov-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--s-12);
+  align-items: start;
+  margin-top: var(--s-12);
+}
+@container ov (max-width: 860px) {
+  .ov-cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-10);
+  }
+}
+.ov-urgent,
+.ov-side {
+  min-width: 0;
+}
+.ov-urgent__list,
+.ov-tiers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.ov-urgent__list > li,
+.ov-tiers > li {
+  border-bottom: 1px solid var(--line);
+}
+.ov-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: 0 calc(var(--s-2) * -1);
+  padding: var(--s-4) var(--s-2);
+  border-radius: var(--r-md);
+  text-decoration: none;
+  transition: background var(--t-fast) var(--ease);
+}
+.ov-row:hover {
+  background: var(--surface-1);
+}
+.ov-row__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ov-row__top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.ov-row__top .tier {
+  flex: none;
+}
+.ov-row__pkg {
+  min-width: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+}
+.ov-row__pkg .subtle {
+  font-weight: 400;
+}
+.ov-row__id {
+  font-size: var(--fs-xs);
+}
+.ov-row__why {
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.ov-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--s-4);
+}
+.ov-row__go {
+  flex: none;
+  color: var(--text-3);
+  transition:
+    color var(--t-fast),
+    transform var(--t-fast) var(--ease);
+}
+.ov-row:hover .ov-row__go {
+  color: var(--text);
+  transform: translateX(2px);
+}
+.ov-urgent__foot {
+  margin-top: var(--s-3);
+  font-size: var(--fs-xs);
+}
+
+/* Tiers */
+.ov-tier {
+  --tier-c: var(--neutral);
+  display: grid;
+  gap: 6px;
+  margin: 0 calc(var(--s-2) * -1);
+  padding: var(--s-3) var(--s-2);
+  border-radius: var(--r-md);
+  text-decoration: none;
+  transition: background var(--t-fast) var(--ease);
+}
+.ov-tier:hover {
+  background: var(--surface-1);
+}
+.ov-tier__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.ov-tier__n {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  font-weight: 500;
+  color: var(--text);
+}
+.ov-tier__blurb {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.ov-tier__bar {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.ov-tier__bar > span {
+  display: block;
+  height: 100%;
+  background: var(--tier-c);
+}
+
+/* Distributions */
+.ov-breakdowns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  margin-top: var(--s-8);
+  padding-top: var(--s-6);
+  border-top: 1px solid var(--line);
+}
+.ov-dist__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+.ov-dist__head h3 {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.ov-dist__head .num {
+  font-size: var(--fs-xs);
+}
+.ov-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.ov-bar > span {
+  flex-basis: 0;
+  min-width: 3px;
+}
+.ov-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--s-4);
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ov-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  text-decoration: none;
+}
+a.ov-legend__item:hover .ov-legend__label {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ov-legend__item i {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.ov-legend__item b {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text);
+}
+.ov-legend .is-zero .ov-legend__item {
+  color: var(--text-3);
+}
+.ov-legend .is-zero b {
+  color: var(--text-3);
+}
+.ov-dist__note {
+  margin-top: var(--s-2);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+/* Fix plan at a glance */
+.ov-plan {
+  margin-top: var(--s-12);
+  padding-top: var(--s-8);
+  border-top: 1px solid var(--line);
+}
+.ov-plan__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-10);
+  align-items: start;
+}
+@container ov (max-width: 760px) {
+  .ov-plan__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-6);
+  }
+}
+.ov-plan__big {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xl);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+.ov-plan__big .subtle {
+  font-size: var(--fs-xl);
+  letter-spacing: 0;
+}
+.ov-plan__text {
+  margin-top: var(--s-2);
+  font-size: var(--fs-md);
+  color: var(--text);
+}
+.ov-plan__sub {
+  margin-top: var(--s-2);
+  max-width: 60ch;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* Notes */
+.ov-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-top: var(--s-12);
+}
+.ov-notes__list {
+  margin: var(--s-2) 0 0;
+  padding-left: var(--s-5);
+  line-height: 1.6;
+}
+.ov-notes .callout code {
+  padding: 0 4px;
+}

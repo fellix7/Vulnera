@@ -21,8 +21,11 @@ export function navigate(to: string, opts?: { replace?: boolean; keepScroll?: bo
   if (to === snapshot()) return
   if (opts?.replace) window.history.replaceState(null, '', to)
   else window.history.pushState(null, '', to)
-  if (!opts?.keepScroll) window.scrollTo({ top: 0 })
+  const hash = new URL(to, window.location.origin).hash.slice(1)
+  if (!opts?.keepScroll && !hash) window.scrollTo({ top: 0 })
   notify()
+  // Links like /#how-it-works: scroll once the target page has rendered.
+  if (hash) window.setTimeout(() => document.getElementById(decodeURIComponent(hash))?.scrollIntoView(), 60)
 }
 
 export interface Location {

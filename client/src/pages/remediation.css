@@ -1,0 +1,414 @@
+/* Remediation page. Uses shared tokens from index.css only. */
+
+.rem-page {
+  gap: var(--s-6);
+}
+.rem-summary strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Legend ------------------------------------------------------------------ */
+.rem-legend {
+  container: rem-legend / inline-size;
+  padding: var(--s-4) var(--s-5);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.rem-legend ul {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-4) var(--s-6);
+  margin: var(--s-3) 0 0;
+}
+.rem-legend li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+.rem-legend p {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  max-width: 52ch;
+}
+@container rem-legend (max-width: 620px) {
+  .rem-legend ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Options ------------------------------------------------------------------ */
+.rem-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  font-size: var(--fs-sm);
+}
+.rem-tools code {
+  font-size: 0.95em;
+  color: var(--text);
+}
+.rem-snip {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.rem-snip summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 10px var(--s-4);
+  cursor: pointer;
+  list-style: none;
+  color: var(--text);
+  font-weight: 500;
+}
+.rem-snip summary::-webkit-details-marker {
+  display: none;
+}
+.rem-snip__chev {
+  color: var(--text-3);
+  transition: transform var(--t-fast) var(--ease);
+}
+.rem-snip[open] .rem-snip__chev {
+  transform: rotate(90deg);
+}
+.rem-snip__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: 0 var(--s-4) var(--s-4);
+}
+
+/* List ---------------------------------------------------------------------- */
+.rem-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.rem-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-3) var(--s-6);
+}
+.rem-list-head h2 {
+  font-size: var(--fs-lg);
+}
+.rem-list-head p {
+  margin-top: 2px;
+  font-size: var(--fs-sm);
+}
+.rem-filter {
+  align-self: flex-start;
+}
+.rem-list-box {
+  container: rem / inline-size;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.rem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rem {
+  --rem-indent: calc(var(--s-4) + 14px + var(--s-3));
+  border-bottom: 1px solid var(--line);
+}
+.rem:last-child {
+  border-bottom: 0;
+}
+
+.rem__head {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1.55fr) 84px 156px;
+  grid-template-areas: 'chev pkg ver prio cleared status';
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: 12px var(--s-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.rem__head:hover {
+  background: var(--surface-2);
+}
+.rem__head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 0;
+}
+.rem--verified .rem__head {
+  box-shadow: inset 2px 0 0 var(--ok);
+}
+.rem--test .rem__head {
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+.rem--none .rem__head {
+  box-shadow: inset 2px 0 0 var(--critical);
+}
+.rem__chev {
+  grid-area: chev;
+  color: var(--text-3);
+  transition: transform var(--t-fast) var(--ease);
+}
+.rem__head[aria-expanded='true'] .rem__chev {
+  transform: rotate(90deg);
+  color: var(--text);
+}
+.rem__pkg {
+  grid-area: pkg;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.rem__name {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.rem__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rem__ver {
+  grid-area: ver;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.rem__ver svg {
+  color: var(--text-3);
+}
+.rem__to {
+  color: var(--text);
+  font-weight: 600;
+}
+.rem__nofix {
+  color: var(--critical);
+  font-weight: 500;
+}
+.rem__prio {
+  grid-area: prio;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.rem__cleared {
+  grid-area: cleared;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  text-align: right;
+  white-space: nowrap;
+}
+.rem__cleared strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+.rem-status {
+  grid-area: status;
+  justify-self: end;
+}
+
+.rem__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  padding: 0 var(--s-4) 12px var(--rem-indent);
+}
+.rem__cmd {
+  flex: 1 1 360px;
+  min-width: 0;
+  max-width: 680px;
+}
+.rem__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.rem__note svg {
+  flex: none;
+}
+.rem__note--warn {
+  color: var(--warn);
+}
+
+/* Expanded detail ---------------------------------------------------------- */
+.rem__detail {
+  padding: var(--s-5) var(--s-4) var(--s-5) var(--rem-indent);
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+}
+.rem__cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: var(--s-6);
+}
+.rem__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.rem__block h3 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rem__block p {
+  line-height: 1.6;
+}
+.rem__block code,
+.rem__chain code {
+  color: var(--text);
+}
+.rem__verified {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s-2) var(--s-3);
+}
+.rem__verified > span:last-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.rem-adv {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+.rem-adv li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 9px var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+.rem-adv li:last-child {
+  border-bottom: 0;
+}
+.rem-adv__id {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.rem-adv__sum {
+  order: 2;
+  flex: 1 0 100%;
+  overflow-wrap: anywhere;
+}
+.rem-adv__ref {
+  order: 1;
+  margin-left: auto;
+}
+.rem-opts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  line-height: 1.6;
+}
+.rem-opts strong {
+  color: var(--text);
+}
+.rem__optcmd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+.rem__optcmd .cmd {
+  align-self: stretch;
+}
+.rem__hint {
+  font-size: var(--fs-xs);
+}
+.rem-reasons {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.6;
+}
+
+/* Narrower lists: two lines per row, then stacked ---------------------------- */
+@container rem (max-width: 880px) {
+  .rem__head {
+    grid-template-columns: 14px minmax(0, 1fr) minmax(0, 1.4fr) 156px;
+    grid-template-areas:
+      'chev pkg ver status'
+      'chev pkg prio cleared';
+    row-gap: 8px;
+  }
+  .rem__cleared {
+    justify-self: end;
+  }
+  .rem__cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container rem (max-width: 600px) {
+  .rem__head {
+    grid-template-columns: 14px minmax(0, 1fr) max-content;
+    grid-template-areas:
+      'chev pkg status'
+      '.    ver ver'
+      '.    prio cleared';
+  }
+}
+@container rem (max-width: 480px) {
+  .rem {
+    --rem-indent: var(--s-4);
+  }
+  .rem__head {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'chev pkg pkg'
+      '.    ver ver'
+      '.    prio prio'
+      '.    status cleared';
+  }
+  .rem-status {
+    justify-self: start;
+  }
+  .rem__cleared {
+    justify-self: end;
+  }
+}
