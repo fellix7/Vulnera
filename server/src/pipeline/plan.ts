@@ -1,7 +1,7 @@
 import semver from 'semver';
 import { cached } from '../cache.js';
 import type { Advisory, Package, UpgradePlan } from '../types.js';
-import { queryVersions } from './osv.js';
+import { mapLimit, queryVersions } from './osv.js';
 
 const MAX_VERIFY_TRIES = 5;
 
@@ -50,22 +50,43 @@ function candidateFor(current: string, advisories: Advisory[]): string | null {
   return candidate;
 }
 
-async function resolveFix(pkg: Package, advisories: Advisory[]): Promise<string | null> {
-  const candidate = candidateFor(pkg.version, advisories);
-  if (!candidate) return null;
+const REGISTRY_CONCURRENCY = 8;
 
-  const [ids] = await queryVersions([{ name: pkg.name, version: candidate }]);
-  if (!ids!.length) return candidate;
+/**
+ * Smallest verified-clean version per vulnerable package, or null. Lookups are batched:
+ * one OSV call for every candidate, then one for the fallbacks of the candidates that were still vulnerable.
+ */
+async function resolveFixes(entries: { pkg: Package; advisories: Advisory[] }[]): Promise<(string | null)[]> {
+  const candidates = entries.map(({ pkg, advisories }) => candidateFor(pkg.version, advisories));
+  const probes = entries.flatMap((e, i) => (candidates[i] ? [{ name: e.pkg.name, version: candidates[i]! }] : []));
+  const probeResults = await queryVersions(probes);
+  const vulnerable = new Map(probes.map((p, k) => [`${p.name}@${p.version}`, probeResults[k]!.length > 0]));
 
-  // The candidate is itself vulnerable: try the next stable releases above it.
-  const higher = (await registryVersions(pkg.name))
-    .filter((v) => semver.valid(v) && !semver.prerelease(v) && semver.gt(v, candidate))
-    .sort(semver.compare)
-    .slice(0, MAX_VERIFY_TRIES);
-  if (!higher.length) return null;
-  const results = await queryVersions(higher.map((version) => ({ name: pkg.name, version })));
-  const clean = results.findIndex((r) => r.length === 0);
-  return clean === -1 ? null : higher[clean]!;
+  // Candidates that are themselves vulnerable: look at the next stable releases above them.
+  const retryIdx = entries.map((_e, i) => i).filter((i) => candidates[i] && vulnerable.get(`${entries[i]!.pkg.name}@${candidates[i]}`));
+  const higherLists = await mapLimit(retryIdx, REGISTRY_CONCURRENCY, async (i) => {
+    const name = entries[i]!.pkg.name;
+    const candidate = candidates[i]!;
+    return (await registryVersions(name))
+      .filter((v) => semver.valid(v) && !semver.prerelease(v) && semver.gt(v, candidate))
+      .sort(semver.compare)
+      .slice(0, MAX_VERIFY_TRIES);
+  });
+  const retryProbes = retryIdx.flatMap((i, k) => higherLists[k]!.map((version) => ({ name: entries[i]!.pkg.name, version })));
+  const retryResults = await queryVersions(retryProbes);
+
+  const fixes: (string | null)[] = entries.map((e, i) => {
+    const c = candidates[i];
+    return c && !vulnerable.get(`${e.pkg.name}@${c}`) ? c : null;
+  });
+  let offset = 0;
+  retryIdx.forEach((i, k) => {
+    const list = higherLists[k]!;
+    const clean = retryResults.slice(offset, offset + list.length).findIndex((r) => r.length === 0);
+    fixes[i] = clean === -1 ? null : list[clean]!;
+    offset += list.length;
+  });
+  return fixes;
 }
 
 export async function planUpgrades(matches: { pkg: Package; advisory: Advisory }[]): Promise<UpgradePlan[]> {
@@ -78,20 +99,19 @@ export async function planUpgrades(matches: { pkg: Package; advisory: Advisory }
   }
 
   const entries = [...groups.values()];
-  const plans = await Promise.all(
-    entries.map(async ({ pkg, advisories }) => {
-      const to = await resolveFix(pkg, advisories);
-      const plan: UpgradePlan = {
-        name: pkg.name,
-        from: pkg.version,
-        to,
-        jump: to ? jumpOf(pkg.version, to) : null,
-        command: to ? commandFor(pkg, to) : null,
-      };
-      if (!pkg.direct && pkg.path[0]) plan.viaParent = pkg.path[0];
-      return { plan, direct: pkg.direct };
-    }),
-  );
+  const fixes = await resolveFixes(entries);
+  const plans = entries.map(({ pkg }, i) => {
+    const to = fixes[i]!;
+    const plan: UpgradePlan = {
+      name: pkg.name,
+      from: pkg.version,
+      to,
+      jump: to ? jumpOf(pkg.version, to) : null,
+      command: to ? commandFor(pkg, to) : null,
+    };
+    if (!pkg.direct && pkg.path[0]) plan.viaParent = pkg.path[0];
+    return { plan, direct: pkg.direct };
+  });
 
   return plans
     .sort(
