@@ -7,7 +7,6 @@ interface Props {
   loading: boolean
   error: string | null
   onScan: (req: ScanRequest) => void
-  onDemo: () => void
 }
 
 const STEPS = [
@@ -44,7 +43,7 @@ function LoadingSteps({ withAi }: { withAi: boolean }) {
   )
 }
 
-export function ScanPanel({ loading, error, onScan, onDemo }: Props) {
+export function ScanPanel({ loading, error, onScan }: Props) {
   const [lockfile, setLockfile] = useState<unknown>(null)
   const [lockName, setLockName] = useState('')
   const [lockError, setLockError] = useState<string | null>(null)
@@ -98,11 +97,6 @@ export function ScanPanel({ loading, error, onScan, onDemo }: Props) {
     const sources = collected?.sources ?? []
     setWithAi(sources.length > 0)
     onScan(sources.length > 0 ? { lockfile, sources } : { lockfile })
-  }
-
-  function scanSample() {
-    setWithAi(true)
-    onScan({ sample: true })
   }
 
   const skippedTotal = collected
@@ -179,12 +173,6 @@ export function ScanPanel({ loading, error, onScan, onDemo }: Props) {
       <div className="actions">
         <button type="button" className="btn primary" onClick={scan} disabled={!lockfile || loading || collecting}>
           {loading ? 'Scanning…' : 'Scan'}
-        </button>
-        <button type="button" className="btn" onClick={scanSample} disabled={loading}>
-          Scan sample project
-        </button>
-        <button type="button" className="btn ghost" onClick={onDemo} disabled={loading}>
-          View demo data
         </button>
       </div>
       <p className="hint privacy">

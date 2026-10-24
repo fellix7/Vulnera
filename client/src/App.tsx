@@ -43,14 +43,6 @@ function App() {
     }
   }
 
-  function showDemo() {
-    setError(null)
-    setSelectedKey(null)
-    setResult(MOCK_RESULT)
-    setIsMock(true)
-    setReview({})
-  }
-
   const funnel = useMemo(() => (result ? computeFunnel(result.findings, review) : null), [result, review])
   const selected = useMemo(
     () => (result && selectedKey ? (result.findings.find((f) => findingKey(f) === selectedKey) ?? null) : null),
@@ -65,7 +57,7 @@ function App() {
     <div className="app">
       <Header />
       <main>
-        <ScanPanel loading={loading} error={error} onScan={runScan} onDemo={showDemo} />
+        <ScanPanel loading={loading} error={error} onScan={runScan} />
 
         {result && funnel && (
           <>
@@ -86,7 +78,7 @@ function App() {
           <section className="card empty-state">
             <h2>No results yet</h2>
             <p className="muted">
-              Upload a package-lock.json, scan the sample project, or open the demo data to see the dashboard.
+              Upload a package-lock.json (and optionally your source folder) to see the dashboard.
             </p>
           </section>
         )}

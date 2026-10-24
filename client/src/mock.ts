@@ -1,4 +1,4 @@
-// Illustrative demo data for UI development and the "View demo data" button.
+// Illustrative demo data for UI development (open the page with ?mock=1).
 // Values are realistic but NOT live: do not treat them as real scan output.
 import type { Advisory, AiVerdict, Enrichment, Finding, Package, ScanResult, Tier, UpgradePlan } from './types'
 

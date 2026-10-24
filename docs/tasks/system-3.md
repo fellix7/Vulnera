@@ -7,7 +7,7 @@ You are building part of **Vulnera**, an npm dependency-vulnerability triage too
 Until `/api/scan` returns real data, use `http://localhost:5173/?mock=1` (mock data lives in `client/src/mock.ts`). `client/src/types.ts` mirrors `server/src/types.ts`; if the server types change, System 1 will tell you.
 
 ## Task A: make the existing dashboard excellent
-1. **Real API**: confirm the scan flow works end to end with the real server (upload `package-lock.json`, optional source folder, "Scan sample project"), loading state with step text, readable error messages from `{ error }` responses.
+1. **Real API**: confirm the scan flow works end to end with the real server (upload `package-lock.json` and optionally a source folder; the sample is `samples/demo-app`. The "Scan sample project" and "View demo data" buttons were removed on purpose, so do not add them back; `?mock=1` still loads mock data for development), loading state with step text, readable error messages from `{ error }` responses.
 2. **Funnel** at the top: Known vulnerabilities → In production code → Your code calls the vulnerable function → Fix now. It is the signature feature; make it the first thing the eye lands on. Show "AI analysis off" clearly when `aiStatus !== 'ok'` so the funnel's third stage is not misread.
 3. **Finding detail**: advisory text is untrusted, render as plain text only, never `dangerouslySetInnerHTML`; external links `rel="noopener noreferrer"`, http/https only.
 4. **Human review**: confirm/dispute the AI verdict, lower priority (disabled for KEV findings with a tooltip explaining why).

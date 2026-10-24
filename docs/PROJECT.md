@@ -139,7 +139,7 @@ npm install
 cp .env.example .env     # add GEMINI_API_KEY (free key from Google AI Studio)
 npm run dev              # API on :8787, dashboard on :5173
 ```
-Open http://localhost:5173 and click **Scan sample project**.
+Open http://localhost:5173, upload `samples/demo-app/package-lock.json`, choose `samples/demo-app` as the source folder, and click **Scan**. (`POST /api/scan` with `{ "sample": true }` still scans the bundled sample for tests.)
 
 Settings in `.env`: `GEMINI_API_KEY`, `GEMINI_MODEL` (default `gemini-flash-latest`), `GEMINI_RPM` (default 4; raise with a paid key), `OFFLINE=1` (no network, snapshots only), `PORT`.
 

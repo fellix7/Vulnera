@@ -22,7 +22,7 @@ export async function postScan(req: ScanRequest): Promise<ScanResult> {
       body: JSON.stringify(req),
     })
   } catch {
-    throw new Error('Could not reach the API. Is the server running? You can still explore "View demo data".')
+    throw new Error('Could not reach the API. Is the server running?')
   }
 
   const text = await res.text()
