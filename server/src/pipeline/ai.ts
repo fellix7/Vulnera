@@ -424,6 +424,8 @@ interface PackageCode {
 
 /** Line-numbered contents of the files that import the package, within a size budget. Secrets masked. */
 function packageCode(importingFiles: string[], sources: SourceFile[]): PackageCode {
+  // Sorted so the same project gives the same prompt (and cache key) however its files were listed or uploaded.
+  importingFiles = [...importingFiles].sort();
   const byPath = new Map(sources.map((s) => [s.path, s]));
   const parts: string[] = [];
   let total = 0;
