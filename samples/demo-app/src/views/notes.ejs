@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+  <head><title>QuickNotes</title></head>
+  <body>
+    <h1>Your notes (page <%= page %> of <%= total %>)</h1>
+    <ul>
+      <% pages.forEach(function (n) { %>
+        <li><strong><%= n.title %></strong>: <%= n.body %></li>
+      <% }) %>
+    </ul>
+  </body>
+</html>
