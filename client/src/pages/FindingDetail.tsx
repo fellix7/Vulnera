@@ -31,6 +31,7 @@ export default function FindingDetailPage() {
   if (!finding) {
     return (
       <div className="panel">
+        <h1 className="sr-only">Finding not found</h1>
         <EmptyState
           icon="search"
           title="Finding not found"

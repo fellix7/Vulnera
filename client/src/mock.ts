@@ -329,7 +329,7 @@ const plans: UpgradePlan[] = [
     from: '6.7.0',
     to: '6.9.7',
     jump: 'minor',
-    command: 'npm install express@4.17.3',
+    command: 'npm pkg set overrides.qs=6.9.7',
     viaParent: 'express',
   },
   {
@@ -337,7 +337,7 @@ const plans: UpgradePlan[] = [
     from: '0.4.0',
     to: '0.7.1',
     jump: 'minor',
-    command: 'npm install express@4.21.1',
+    command: 'npm pkg set overrides.cookie=0.7.1',
     viaParent: 'express',
   },
   {
@@ -345,7 +345,7 @@ const plans: UpgradePlan[] = [
     from: '1.2.0',
     to: '1.2.6',
     jump: 'patch',
-    command: 'npm install --save-dev mocha@10.4.0',
+    command: 'npm pkg set overrides.minimist=1.2.6',
     viaParent: 'mocha',
   },
   {
@@ -353,7 +353,7 @@ const plans: UpgradePlan[] = [
     from: '1.2.3',
     to: '1.2.4',
     jump: 'patch',
-    command: 'npm install --save-dev eslint@8.57.0',
+    command: 'npm pkg set overrides.word-wrap=1.2.4',
     viaParent: 'eslint',
   },
   {
@@ -361,7 +361,7 @@ const plans: UpgradePlan[] = [
     from: '7.4.5',
     to: '7.4.6',
     jump: 'patch',
-    command: 'npm install --save-dev jest-environment-jsdom@29.7.0',
+    command: 'npm pkg set overrides.ws=7.4.6',
     viaParent: 'jest-environment-jsdom',
   },
 ]

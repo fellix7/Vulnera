@@ -1,7 +1,7 @@
 import { useEffect, type ComponentType } from 'react'
 import { AppShell } from './components/AppShell'
 import { Icon } from './components/ui/Icon'
-import { EmptyState } from './components/ui/Kit'
+import { PageHeader } from './components/ui/Kit'
 import EvidencePage from './pages/Evidence'
 import FindingDetailPage from './pages/FindingDetail'
 import FindingsPage from './pages/Findings'
@@ -44,18 +44,17 @@ function Routes() {
   if (!route) {
     return (
       <AppShell>
-        <EmptyState
-          icon="alert"
+        <PageHeader
+          eyebrow="404"
           title="Page not found"
+          description={`There is nothing at ${path}.`}
           actions={
             <Link to="/overview" className="btn">
               <Icon name="arrow-left" size={14} />
               Back to overview
             </Link>
           }
-        >
-          There is nothing at {path}.
-        </EmptyState>
+        />
       </AppShell>
     )
   }

@@ -131,8 +131,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           {current ? (
             <div className="topbar__ctx">
-              <SourceBadge source={current.source} />
+              <span className="hide-sm">
+                <SourceBadge source={current.source} />
+              </span>
               <strong className="truncate">{current.projectName}</strong>
+              {current.source === 'demo' && <span className="badge badge--accent show-sm">Demo</span>}
               <span className="subtle hide-sm num">
                 {current.result.packageCount} packages · {formatScanTime(current.result.scannedAt)}
               </span>
@@ -147,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link to="/scan" className="btn btn--primary btn--sm">
                 <Icon name="upload" size={14} />
                 <span className="hide-sm">Scan a project</span>
-                <span className="sr-only">Scan a project</span>
+                <span className="sr-only show-sm">Scan a project</span>
               </Link>
             )}
           </div>

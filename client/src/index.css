@@ -1115,6 +1115,14 @@ kbd,
 .menu-btn {
   display: none;
 }
+.show-sm {
+  display: none;
+}
+@media (max-width: 640px) {
+  .show-sm {
+    display: inline-flex;
+  }
+}
 .content {
   width: 100%;
   max-width: var(--content-max);
@@ -1150,7 +1158,7 @@ kbd,
   }
 }
 @media (max-width: 640px) {
-  .topbar__ctx .hide-sm {
+  .topbar .hide-sm {
     display: none;
   }
   .page-head h1 {
