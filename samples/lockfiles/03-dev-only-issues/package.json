@@ -1,0 +1,1 @@
+{"name":"dev-only-issues","version":"1.0.0","dependencies":{"dayjs":"1.11.10"},"devDependencies":{"mocha":"8.2.0","webpack":"4.41.0","webpack-dev-server":"3.8.0","jest":"24.9.0"}}

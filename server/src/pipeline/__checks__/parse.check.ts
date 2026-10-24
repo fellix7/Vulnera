@@ -152,3 +152,19 @@ for (const f of files) {
   for (const p of real.filter((p) => p.direct).slice(0, 2)) console.log(`  ${p.name}@${p.version}: ${p.path.join(' > ')}`);
   assert.ok(real.length > 0);
 }
+
+// Aliased install: keyed by the alias, but the real registry name must be reported.
+{
+  const pkgs = parseLockfile({
+    lockfileVersion: 3,
+    packages: {
+      '': { dependencies: { 'lodash-old': 'npm:lodash@4.17.15' } },
+      'node_modules/lodash-old': { name: 'lodash', version: '4.17.15' },
+    },
+  });
+  assert.equal(pkgs.length, 1);
+  assert.equal(pkgs[0].name, 'lodash');
+  assert.equal(pkgs[0].version, '4.17.15');
+  assert.equal(pkgs[0].direct, true);
+  console.log('ok  aliased package reports registry name');
+}

@@ -129,10 +129,13 @@ export function parseLockfile(lock: unknown): Package[] {
     const isDirect = key === NM + name && rootNames.has(name);
     const dev = e.dev === true;
     const path = pathOf.get(key) ?? [name];
-    const id = `${name}@${e.version}`;
+    // Aliased installs ("lodash-old": "npm:lodash@4.17.15") are keyed by the alias but record the real
+    // registry name in `name`; vulnerability lookups and upgrade commands need the real one.
+    const registryName = typeof e.name === 'string' && e.name !== '' ? e.name : name;
+    const id = `${registryName}@${e.version}`;
     const cur = acc.get(id);
     if (!cur) {
-      acc.set(id, { name, version: e.version, direct: isDirect, dev, path });
+      acc.set(id, { name: registryName, version: e.version, direct: isDirect, dev, path });
     } else {
       cur.direct = cur.direct || isDirect;
       cur.dev = cur.dev && dev;

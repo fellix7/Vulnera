@@ -1,0 +1,1 @@
+{"name":"transitive-heavy","version":"1.0.0","dependencies":{"request":"2.88.0","handlebars":"4.1.0","mongoose":"5.7.0","socket.io":"2.2.0"}}
