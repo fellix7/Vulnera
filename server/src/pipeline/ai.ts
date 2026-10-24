@@ -362,14 +362,42 @@ function toVerdict(raw: unknown): AiVerdict {
   };
 }
 
-/** One structured Gemini call, retried once if the call fails or the JSON does not parse/validate. */
+// Free-tier keys allow ~5 requests/minute per model, so calls are paced globally.
+// Paid keys: set GEMINI_RPM higher (e.g. 60) in .env.
+const DEFAULT_RPM = 4;
+const MAX_RATE_LIMIT_WAITS = 3;
+const MAX_RATE_LIMIT_WAIT_MS = 90_000;
+let nextCallAt = 0;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function waitForSlot() {
+  const rpm = Math.max(1, Number(process.env.GEMINI_RPM) || DEFAULT_RPM);
+  const start = Math.max(Date.now(), nextCallAt);
+  nextCallAt = start + 60_000 / rpm;
+  const wait = start - Date.now();
+  if (wait > 0) await sleep(wait);
+}
+
+/** Milliseconds Google asked us to wait after a 429, or null if this error is not a rate limit. */
+function rateLimitDelayMs(e: unknown): number | null {
+  const msg = errMsg(e);
+  if (!/\b429\b|RESOURCE_EXHAUSTED/.test(msg)) return null;
+  const m = /retry in ([\d.]+)s/i.exec(msg) ?? /"retryDelay":"([\d.]+)s"/.exec(msg);
+  const seconds = m ? Number(m[1]) : 30;
+  return Math.min(MAX_RATE_LIMIT_WAIT_MS, Math.ceil(seconds * 1000) + 1000);
+}
+
+/** One structured Gemini call. Paced to the rate limit; waits and retries on 429; retried once on other failures or bad JSON. */
 async function callGemini<T>(
   client: GoogleGenAI,
   args: { system: string; prompt: string; schema: object; parse: (raw: unknown) => T },
 ): Promise<T> {
   let lastErr: unknown;
+  let rateLimitWaits = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      await waitForSlot();
       const res = await withTimeout(
         (signal) =>
           client.models.generateContent({
@@ -388,6 +416,13 @@ async function callGemini<T>(
       return args.parse(parseJson(res.text));
     } catch (e) {
       lastErr = e;
+      const delay = rateLimitDelayMs(e);
+      if (delay !== null && rateLimitWaits < MAX_RATE_LIMIT_WAITS) {
+        // A rate-limited attempt does not use up the retry: back off for Google's suggested delay, then try again.
+        rateLimitWaits++;
+        nextCallAt = Math.max(nextCallAt, Date.now() + delay);
+        attempt--;
+      }
     }
   }
   throw lastErr;
