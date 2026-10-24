@@ -18,7 +18,7 @@ const BATCH_SIZE = 12; // advisories per call
 const REPLAY_DELAY_PER_CALL_MS = 2000;
 const REPLAY_DELAY_MAX_MS = 15_000;
 const MAX_FILE_CHARS = 40_000; // per file; real projects have large files
-const MAX_TOTAL_CODE_CHARS = 120_000; // ~30k tokens per call, within free-tier token limits
+const MAX_TOTAL_CODE_CHARS = 160_000; // ~30k tokens per call, within free-tier token limits
 const MAX_SNIPPETS = 8;
 const CONTEXT_LINES = 3;
 const MAX_LINE_CHARS = 300; // long (minified) lines are truncated before being sent
@@ -507,14 +507,40 @@ function relevantLines(lines: string[], pkgName: string): Set<number> {
   return keep;
 }
 
-function packageCode(pkgName: string, importingFiles: string[], sources: SourceFile[]): PackageCode {
-  // Sorted so the same project gives the same prompt (and cache key) however its files were listed or uploaded.
-  const files = [...importingFiles].sort();
+const STOPWORDS = new Set(
+  ('vulnerable vulnerability vulnerabilities version versions package packages allows allow allowed attacker attackers could when that this with which from have been ' +
+    'affected users user remote issue input applications application patched prior before using used uses also into other than these those where their there will ' +
+    'would your after does only such fixed impact workarounds references description security exploit exploited exploitation denial service because cause causes ' +
+    'caused leading lead result results possible perform performs able specially crafted request requests function functions code node npm release releases ' +
+    'update upgrade latest earlier through however instead within without whether certain specific certain may might should must can not are was were has had its ' +
+    'the and for you all any but one two new via per out off').split(' '),
+);
+
+/** Distinctive words from the advisories, used to decide which files are worth sending. */
+function advisoryKeywords(text: string, pkgName: string): string[] {
+  // The package's own name appears in every advisory and every importing file, so it says nothing about relevance.
+  const own = new Set(pkgName.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+  const counts = new Map<string, number>();
+  for (const w of text.toLowerCase().match(/[a-z][a-z0-9_-]{3,}/g) ?? []) {
+    if (!STOPWORDS.has(w) && !own.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 60).map(([w]) => w);
+}
+
+interface Prepared {
+  path: string;
+  rows: string[];
+  size: number;
+  cutInFile: boolean; // the file alone exceeded its budget even after keeping only relevant lines
+  score: number; // how many advisory keywords the file mentions
+}
+
+function packageCode(pkgName: string, importingFiles: string[], sources: SourceFile[], advisoryText: string): PackageCode {
+  const keywords = advisoryKeywords(advisoryText, pkgName);
   const byPath = new Map(sources.map((s) => [s.path, s]));
-  const parts: string[] = [];
-  let total = 0;
-  let cutFiles = 0;
-  for (const path of files) {
+  const prepared: Prepared[] = [];
+
+  for (const path of [...importingFiles].sort()) {
     const src = byPath.get(path);
     if (!src) continue;
     const lines = splitLines(src.content);
@@ -524,30 +550,51 @@ function packageCode(pkgName: string, importingFiles: string[], sources: SourceF
     };
     // Small files go in whole. Oversized files keep only the code around the import and its uses.
     const wholeSize = lines.reduce((n, _l, i) => n + rowOf(i).length + 1, 0);
-    const oversized = wholeSize > MAX_FILE_CHARS;
-    const keep = oversized ? relevantLines(lines, pkgName) : null;
+    const keep = wholeSize > MAX_FILE_CHARS ? relevantLines(lines, pkgName) : null;
 
     const rows: string[] = [];
-    let used = 0;
-    let cut = false;
+    let size = 0;
+    let cutInFile = false;
     let prev = -2;
     for (let i = 0; i < lines.length; i++) {
       if (keep && !keep.has(i)) continue;
       const row = rowOf(i);
-      if (used + row.length > MAX_FILE_CHARS || total + used + row.length > MAX_TOTAL_CODE_CHARS) {
-        cut = true;
+      if (size + row.length > MAX_FILE_CHARS) {
+        cutInFile = true;
         break;
       }
       if (keep && i !== prev + 1 && rows.length > 0) rows.push('...');
       rows.push(row);
-      used += row.length + 1;
+      size += row.length + 1;
       prev = i;
     }
-    if (cut) cutFiles++;
-    total += used;
-    if (rows.length > 0) parts.push(`<file path="${path}">\n${rows.join('\n')}\n</file>`);
+    const haystack = `${path}\n${src.content}`.toLowerCase();
+    prepared.push({ path, rows, size, cutInFile, score: keywords.filter((k) => haystack.includes(k)).length });
   }
-  return { text: redact(parts.join('\n')), truncated: cutFiles > 0, cutFiles, totalFiles: files.length };
+
+  // Everything fits: send it all. Otherwise the files that mention the advisories' terms go first.
+  const totalSize = prepared.reduce((n, f) => n + f.size, 0);
+  let chosen = prepared;
+  let leftOutRelevant = 0;
+  if (totalSize > MAX_TOTAL_CODE_CHARS) {
+    chosen = [];
+    let used = 0;
+    for (const f of [...prepared].sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))) {
+      if (used + f.size <= MAX_TOTAL_CODE_CHARS) {
+        chosen.push(f);
+        used += f.size;
+      } else if (f.score > 0) {
+        leftOutRelevant++; // a file that mentions the advisory's terms was dropped
+      }
+    }
+    chosen.sort((a, b) => a.path.localeCompare(b.path));
+  }
+  const cutFiles = leftOutRelevant + chosen.filter((f) => f.cutInFile).length;
+  const text = chosen
+    .filter((f) => f.rows.length > 0)
+    .map((f) => `<file path="${f.path}">\n${f.rows.join('\n')}\n</file>`)
+    .join('\n');
+  return { text: redact(text), truncated: cutFiles > 0, cutFiles, totalFiles: prepared.length };
 }
 
 type Item = { key: string; finding: Finding };
@@ -556,11 +603,13 @@ async function analyzeChunk(
   pool: GeminiPool,
   pkgName: string,
   chunk: Item[],
-  code: PackageCode,
+  importingFiles: string[],
   sources: SourceFile[],
   verdicts: Map<string, AiVerdict>,
 ): Promise<boolean> {
   let live = false;
+  const advisoryText = chunk.map((c) => `${c.finding.advisory.summary ?? ''} ${c.finding.advisory.details ?? ''}`).join('\n');
+  const code = packageCode(pkgName, importingFiles, sources, advisoryText);
   const advisories = chunk
     .map(({ finding: { advisory } }) =>
       [
@@ -599,7 +648,7 @@ async function analyzeChunk(
     if (verdict.verdict === 'NO_VULNERABLE_USAGE_FOUND' && code.truncated) {
       verdict = {
         verdict: 'UNCERTAIN',
-        reasoning: `${verdict.reasoning} (Downgraded to UNCERTAIN: ${code.cutFiles} of ${code.totalFiles} files importing the package were too large to review in full.)`,
+        reasoning: `${verdict.reasoning} (Downgraded to UNCERTAIN: ${code.cutFiles} of ${code.totalFiles} relevant files importing the package were too large to review in full.)`,
         citations: verdict.citations,
       };
     }
@@ -662,11 +711,10 @@ export async function analyzeFindings(
           }
           continue;
         }
-        const code = packageCode(pkgName, usage.importingFiles, sources);
         for (let i = 0; i < items.length; i += BATCH_SIZE) {
           const chunk = items.slice(i, i + BATCH_SIZE);
           try {
-            if (await analyzeChunk(pool, pkgName, chunk, code, sources, verdicts)) liveCalls++;
+            if (await analyzeChunk(pool, pkgName, chunk, usage.importingFiles, sources, verdicts)) liveCalls++;
             geminiOk++;
           } catch (e) {
             geminiFailed++;
