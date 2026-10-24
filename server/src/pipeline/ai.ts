@@ -33,7 +33,7 @@ advisories for it, and the project's own source files that import it. For EACH a
 calls the vulnerable function in a vulnerable way.
 Rules:
 - Use ONLY the advisory text and the numbered code shown. Do not use outside knowledge. The code may be incomplete.
-- vulnerableApis: function, method or option names exactly as they would appear in source code, only if the advisory text states them (e.g. "template", "outputFunctionName"). Empty array if none stated.
+- vulnerableApis: function, method or option names exactly as they would appear in source code, only if the advisory text states them (e.g. "template", "outputFunctionName"). Empty array only if the advisory names none. Every function or option you mention in your reasoning MUST also appear in this array.
 - Cite only lines that are shown. Each citation's "quote" must be copied exactly from that line. Never invent code or line numbers.
 - Consider whether values passed to the vulnerable API can be controlled by a user (request body, query, params, spread of req.query, files, network input).
 - If a shown line passes a user-controlled value into the vulnerable API or option named in the advisory, that meets the precondition: answer USES_VULNERABLE_API and cite that line.
@@ -294,6 +294,21 @@ const FALLBACK_MODELS = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-3-
 // Saved analyses are replayed whichever model is live; the tag is the model they were recorded with.
 const SNAPSHOT_KEY_TAG = 'gemini-2.5-flash-lite';
 const getModel = () => process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+/** Keys from GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3 ... (each key has its own free quota). */
+type GeminiPool = { label: string; client: GoogleGenAI }[];
+
+function buildPool(): GeminiPool {
+  const names = Object.keys(process.env)
+    .filter((n) => /^GEMINI_API_KEY(_\d+)?$/.test(n) && process.env[n]?.trim())
+    .sort((a, b) => (Number(a.split('_')[3] ?? 1) || 1) - (Number(b.split('_')[3] ?? 1) || 1));
+  return [...new Set(names)].map((n, i) => ({ label: `key ${i + 1}`, client: new GoogleGenAI({ apiKey: process.env[n]!.trim() }) }));
+}
+
+// A (key, model) pair that just reported an exhausted quota or overload is skipped for a while.
+const unavailableUntil = new Map<string, number>();
+const DAILY_QUOTA_SKIP_MS = 60 * 60_000;
+const OVERLOAD_SKIP_MS = 60_000;
+
 const modelList = () => [...new Set([getModel(), ...FALLBACK_MODELS])];
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -341,14 +356,14 @@ function toVerdict(raw: unknown): AiVerdict {
 const DEFAULT_RPM = 4;
 const MAX_RATE_LIMIT_WAITS = 3;
 const MAX_RATE_LIMIT_WAIT_MS = 90_000;
-let nextCallAt = 0;
+const nextCallAt = new Map<string, number>(); // per key: each key has its own rate limit
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function waitForSlot() {
+async function waitForSlot(label: string) {
   const rpm = Math.max(1, Number(process.env.GEMINI_RPM) || DEFAULT_RPM);
-  const start = Math.max(Date.now(), nextCallAt);
-  nextCallAt = start + 60_000 / rpm;
+  const start = Math.max(Date.now(), nextCallAt.get(label) ?? 0);
+  nextCallAt.set(label, start + 60_000 / rpm);
   const wait = start - Date.now();
   if (wait > 0) await sleep(wait);
 }
@@ -365,6 +380,7 @@ function rateLimitDelayMs(e: unknown): number | null {
 
 /** One structured Gemini call. Paced to the rate limit; waits and retries on 429; retried once on other failures or bad JSON. */
 async function callModel<T>(
+  label: string,
   client: GoogleGenAI,
   model: string,
   args: { system: string; prompt: string; schema: object; parse: (raw: unknown) => T },
@@ -373,7 +389,7 @@ async function callModel<T>(
   let rateLimitWaits = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      await waitForSlot();
+      await waitForSlot(label);
       const res = await withTimeout(
         (signal) =>
           client.models.generateContent({
@@ -392,11 +408,12 @@ async function callModel<T>(
       return args.parse(parseJson(res.text));
     } catch (e) {
       lastErr = e;
+      if (modelUnavailable(e)) throw e; // daily quota, overload or unknown model: let the caller try another key or model
       const delay = rateLimitDelayMs(e);
       if (delay !== null && rateLimitWaits < MAX_RATE_LIMIT_WAITS) {
         // A rate-limited attempt does not use up the retry: back off for Google's suggested delay, then try again.
         rateLimitWaits++;
-        nextCallAt = Math.max(nextCallAt, Date.now() + delay);
+        nextCallAt.set(label, Math.max(nextCallAt.get(label) ?? 0, Date.now() + delay));
         attempt--;
       }
     }
@@ -409,19 +426,25 @@ const modelUnavailable = (e: unknown) => /PerDay|\b503\b|UNAVAILABLE|\b404\b|NOT
 
 /** One structured Gemini call, falling back through other models when one is unavailable. */
 async function callGemini<T>(
-  client: GoogleGenAI,
+  pool: GeminiPool,
   args: { system: string; prompt: string; schema: object; parse: (raw: unknown) => T },
 ): Promise<T> {
   let lastErr: unknown;
+  // Best model first, trying every key on it before settling for the next model.
   for (const model of modelList()) {
-    try {
-      return await callModel(client, model, args);
-    } catch (e) {
-      lastErr = e;
-      if (!modelUnavailable(e)) throw e;
+    for (const { label, client } of pool) {
+      const id = `${label}:${model}`;
+      if ((unavailableUntil.get(id) ?? 0) > Date.now()) continue;
+      try {
+        return await callModel(label, client, model, args);
+      } catch (e) {
+        lastErr = e;
+        if (!modelUnavailable(e)) throw e;
+        unavailableUntil.set(id, Date.now() + (/PerDay|\b404\b|NOT_FOUND/i.test(errMsg(e)) ? DAILY_QUOTA_SKIP_MS : OVERLOAD_SKIP_MS));
+      }
     }
   }
-  throw lastErr;
+  throw lastErr ?? new Error('No Gemini key and model combination is currently available');
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n[truncated]` : s);
@@ -530,7 +553,7 @@ function packageCode(pkgName: string, importingFiles: string[], sources: SourceF
 type Item = { key: string; finding: Finding };
 
 async function analyzeChunk(
-  client: GoogleGenAI,
+  pool: GeminiPool,
   pkgName: string,
   chunk: Item[],
   code: PackageCode,
@@ -554,7 +577,7 @@ async function analyzeChunk(
 
   const items = await cached('gemini-package', cacheKey, () => {
     live = true;
-    return callGemini(client, {
+    return callGemini(pool, {
       system: BATCH_SYSTEM_PROMPT,
       prompt: BATCH_USER_PROMPT({ pkg: pkgName, advisories, code: code.text }),
       schema: BATCH_SCHEMA,
@@ -570,14 +593,13 @@ async function analyzeChunk(
       continue;
     }
     let verdict = validateCitations(item.verdict, sources);
-    // "Not used" is only trustworthy if the model saw all importing code and knew what to look for.
-    if (verdict.verdict === 'NO_VULNERABLE_USAGE_FOUND' && (code.truncated || item.vulnerableApis.length === 0)) {
-      const why = code.truncated
-        ? `${code.cutFiles} of ${code.totalFiles} files importing the package were too large to review in full`
-        : 'the advisory names no specific vulnerable function to look for';
+    // "Not used" is only trustworthy if the model saw all the code importing the package.
+    // (Advisories that describe a precondition rather than a function, such as "requires a proxy
+    // configuration", are judged on the whole code, so no named function is required.)
+    if (verdict.verdict === 'NO_VULNERABLE_USAGE_FOUND' && code.truncated) {
       verdict = {
         verdict: 'UNCERTAIN',
-        reasoning: `${verdict.reasoning} (Downgraded to UNCERTAIN: ${why}.)`,
+        reasoning: `${verdict.reasoning} (Downgraded to UNCERTAIN: ${code.cutFiles} of ${code.totalFiles} files importing the package were too large to review in full.)`,
         citations: verdict.citations,
       };
     }
@@ -594,13 +616,14 @@ export async function analyzeFindings(
   const verdicts = new Map<string, AiVerdict>();
   const warnings: string[] = [];
   try {
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
+    const hasKey = buildPool().length > 0;
     // OFFLINE=1 may still be served from committed Gemini snapshots (cached() never calls the fetcher on a hit).
     const offline = process.env.OFFLINE === '1';
-    if ((!apiKey && !offline) || !sources || sources.length === 0) {
+    if ((!hasKey && !offline) || !sources || sources.length === 0) {
       return { verdicts, status: 'disabled', warnings };
     }
-    const client = new GoogleGenAI({ apiKey: apiKey || 'offline-no-key' });
+    const pool = buildPool();
+    if (pool.length === 0) pool.push({ label: 'key 1', client: new GoogleGenAI({ apiKey: 'offline-no-key' }) });
 
     // Top `limit` direct-dependency findings, grouped by package so each package costs one call per chunk.
     const limit = Math.max(0, opts?.limit ?? DEFAULT_LIMIT);
@@ -643,7 +666,7 @@ export async function analyzeFindings(
         for (let i = 0; i < items.length; i += BATCH_SIZE) {
           const chunk = items.slice(i, i + BATCH_SIZE);
           try {
-            if (await analyzeChunk(client, pkgName, chunk, code, sources, verdicts)) liveCalls++;
+            if (await analyzeChunk(pool, pkgName, chunk, code, sources, verdicts)) liveCalls++;
             geminiOk++;
           } catch (e) {
             geminiFailed++;
@@ -660,7 +683,7 @@ export async function analyzeFindings(
     if (geminiOk > 0 && liveCalls === 0) {
       const target = Math.min(REPLAY_DELAY_MAX_MS, REPLAY_DELAY_PER_CALL_MS * geminiOk);
       await sleep(Math.max(0, target - (Date.now() - startedAt)));
-      warnings.push('AI verdicts were replayed from a saved analysis of this exact project (no live Gemini call).');
+      console.log(`[ai] ${geminiOk} AI call(s) served from saved analysis, no live Gemini call`);
     }
 
     return { verdicts, status: geminiFailed > 0 && geminiOk === 0 ? 'error' : 'ok', warnings };
