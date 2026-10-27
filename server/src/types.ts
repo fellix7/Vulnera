@@ -30,7 +30,8 @@ export type Tier = 'FIX_NOW' | 'FIX_SPRINT' | 'PLAN' | 'MONITOR';
 export interface AiVerdict {
   verdict: 'USES_VULNERABLE_API' | 'NO_VULNERABLE_USAGE_FOUND' | 'UNCERTAIN';
   reasoning: string;
-  citations: { file: string; line: number; quote: string }[];
+  citations: { file: string; line: number; quote: string }[]; // each quote re-checked against the source file
+  vulnerableApis?: string[]; // functions/options the advisory names, as extracted by the AI
 }
 
 export interface Finding {

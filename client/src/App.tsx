@@ -1,104 +1,75 @@
-import { useMemo, useState } from 'react'
-import { postScan } from './api'
-import { Banners } from './components/Banners'
-import { DetailPanel } from './components/DetailPanel'
-import { ExportBar } from './components/ExportBar'
-import { FindingsList } from './components/FindingsList'
-import { Funnel } from './components/Funnel'
-import { Header } from './components/Header'
-import { ScanPanel } from './components/ScanPanel'
-import { UpgradeTable } from './components/UpgradeTable'
-import { computeFunnel } from './lib/funnel'
-import { findingKey, type Review, type ReviewState } from './lib/review'
-import { MOCK_RESULT } from './mock'
-import type { ScanRequest, ScanResult } from './types'
+import { useEffect, type ComponentType } from 'react'
+import { AppShell } from './components/AppShell'
+import { Icon } from './components/ui/Icon'
+import { PageHeader } from './components/ui/Kit'
+import EvidencePage from './pages/Evidence'
+import FindingDetailPage from './pages/FindingDetail'
+import FindingsPage from './pages/Findings'
+import LandingPage from './pages/Landing'
+import OverviewPage from './pages/Overview'
+import RemediationPage from './pages/Remediation'
+import ReportsPage from './pages/Reports'
+import ScanPage from './pages/Scan'
+import { Link, navigate, useLocation } from './router'
+import { ScanProvider, useScan } from './state/store'
 
-// ?mock=1 starts with demo data instead of calling the API.
-const START_MOCK = new URLSearchParams(window.location.search).get('mock') === '1'
+const APP_ROUTES: Record<string, { page: ComponentType; title: string }> = {
+  '/scan': { page: ScanPage, title: 'New scan' },
+  '/overview': { page: OverviewPage, title: 'Overview' },
+  '/findings': { page: FindingsPage, title: 'Findings' },
+  '/finding': { page: FindingDetailPage, title: 'Finding' },
+  '/evidence': { page: EvidencePage, title: 'Code evidence' },
+  '/remediation': { page: RemediationPage, title: 'Remediation' },
+  '/reports': { page: ReportsPage, title: 'Reports & history' },
+}
 
-function App() {
-  const [result, setResult] = useState<ScanResult | null>(START_MOCK ? MOCK_RESULT : null)
-  const [isMock, setIsMock] = useState(START_MOCK)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [review, setReview] = useState<ReviewState>({})
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+function Routes() {
+  const { path, search } = useLocation()
+  const { loadDemo } = useScan()
+  const mock = search.get('mock') === '1'
 
-  async function runScan(req: ScanRequest) {
-    setLoading(true)
-    setError(null)
-    setSelectedKey(null)
-    // Drop the previous scan so a failure never shows old results next to the new error.
-    setResult(null)
-    setReview({})
-    try {
-      const r = await postScan(req)
-      setResult(r)
-      setIsMock(false)
-      setReview({})
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Old links: ?mock=1 opened demo data on the single-page dashboard.
+  useEffect(() => {
+    if (!mock) return
+    loadDemo()
+    navigate('/overview', { replace: true })
+  }, [mock, loadDemo])
 
-  const funnel = useMemo(() => (result ? computeFunnel(result.findings, review) : null), [result, review])
-  const selected = useMemo(
-    () => (result && selectedKey ? (result.findings.find((f) => findingKey(f) === selectedKey) ?? null) : null),
-    [result, selectedKey],
-  )
+  const route = APP_ROUTES[path]
+  useEffect(() => {
+    document.title = path === '/' ? 'Vulnera · Fix what matters' : `${route?.title ?? 'Not found'} · Vulnera`
+  }, [path, route])
 
-  function updateReview(key: string, next: Review) {
-    setReview((prev) => ({ ...prev, [key]: next }))
-  }
-
-  return (
-    <div className="app">
-      <Header />
-      <main>
-        <ScanPanel loading={loading} error={error} onScan={runScan} />
-
-        {result && funnel && (
-          <>
-            <Banners result={result} isMock={isMock} />
-            <ExportBar result={result} review={review} isMock={isMock} />
-            <Funnel counts={funnel} aiOff={result.aiStatus !== 'ok'} />
-            <FindingsList
-              findings={result.findings}
-              review={review}
-              selectedKey={selectedKey}
-              onSelect={setSelectedKey}
-            />
-            <UpgradeTable plans={result.plans} findings={result.findings} />
-          </>
-        )}
-
-        {!result && !loading && (
-          <section className="card empty-state">
-            <h2>No results yet</h2>
-            <p className="muted">
-              Upload a package-lock.json (and optionally your source folder) to see the dashboard.
-            </p>
-          </section>
-        )}
-      </main>
-      <footer className="app-footer">
-        Vulnera matches packages to advisories with an exact OSV.dev lookup. AI only adds context and needs human confirmation.
-      </footer>
-
-      {result && selected && (
-        <DetailPanel
-          key={selectedKey}
-          finding={selected}
-          plan={result.plans.find((p) => p.name === selected.pkg.name && p.from === selected.pkg.version)}
-          review={review[selectedKey!]}
-          onChange={(next) => updateReview(selectedKey!, next)}
-          onClose={() => setSelectedKey(null)}
+  if (path === '/') return <LandingPage />
+  if (!route) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="404"
+          title="Page not found"
+          description={`There is nothing at ${path}.`}
+          actions={
+            <Link to="/overview" className="btn">
+              <Icon name="arrow-left" size={14} />
+              Back to overview
+            </Link>
+          }
         />
-      )}
-    </div>
+      </AppShell>
+    )
+  }
+  const Page = route.page
+  return (
+    <AppShell>
+      <Page />
+    </AppShell>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <ScanProvider>
+      <Routes />
+    </ScanProvider>
+  )
+}

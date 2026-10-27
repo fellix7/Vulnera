@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // Same-origin API calls in dev; no CORS needed on the server.
-    proxy: { '/api': 'http://localhost:8787' },
+    proxy: { '/api': process.env.VITE_API_TARGET ?? 'http://localhost:8787' },
   },
 })

@@ -659,7 +659,7 @@ async function analyzeChunk(
         citations: verdict.citations,
       };
     }
-    verdicts.set(key, verdict);
+    verdicts.set(key, item.vulnerableApis.length ? { ...verdict, vulnerableApis: item.vulnerableApis } : verdict);
   }
   return live;
 }

@@ -366,6 +366,24 @@ By default:
 
 **Tip:** Start with the included `samples/` project to explore the demo workflow.
 
+**No lockfile handy?** On the scan page, use **Scan the bundled sample project** (a real pipeline run on `samples/demo-app`) or **Explore demo data** (illustrative, labelled, instant).
+
+### App pages
+
+| Path | What it answers |
+| :--- | :--- |
+| `/` | What Vulnera is and why it differs from a scanner |
+| `/scan` | Upload `package-lock.json` (+ optional source folder for the AI code check) |
+| `/overview` | Current risk posture and the funnel: all → production → used by your code → fix now |
+| `/findings` | Every finding, filterable and sortable; nothing is hidden |
+| `/finding?key=…` | Why it was ranked, advisory, dependency chain, code evidence, review, fix |
+| `/evidence` | Where your code reaches a vulnerable function, with verified citations |
+| `/remediation` | Minimum safe versions and the exact commands, verified vs suggested |
+| `/reports` | Markdown/JSON export, scan history (this browser only), before/after compare |
+
+Design tokens and the page contract are in [docs/DESIGN.md](docs/DESIGN.md). To point the client at an API on another port: `VITE_API_TARGET=http://localhost:8788 npm run dev -w client`.
+
+
 ---
 
 ## ◈ Security by Design
